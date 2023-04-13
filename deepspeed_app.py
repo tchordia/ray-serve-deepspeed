@@ -70,8 +70,11 @@ class Args(BaseModel):
 
 
 raw_args = os.getenv("APPLICATION_ARGS")
-dict_args = yaml.load(raw_args, Loader=yaml.SafeLoader) if raw_args else None
-args = Args.parse_obj(dict_args) if dict_args else Args()
+assert raw_args is not None, "APPLICATION_ARGS env var must be set"
+print("Received args", raw_args)
+dict_args = yaml.load(raw_args, Loader=yaml.SafeLoader)
+print("Received args dict", dict_args)
+args = Args.parse_obj(dict_args)
 
 
 @serve.deployment(
