@@ -1,0 +1,15 @@
+# This file was generated using the `serve build` command on Ray v3.0.0.dev0.
+
+import_path: deepspeed-serve-2:entrypoint
+
+runtime_env: {}
+
+host: 0.0.0.0
+
+port: 8000
+
+deployments:
+
+- name: DeepspeedApp2
+  num_replicas: 6
+  route_prefix: /
