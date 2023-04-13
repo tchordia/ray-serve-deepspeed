@@ -24,12 +24,12 @@ from huggingface_utils import reshard_checkpoint
 from filelock import Timeout, FileLock
 
 
-
 def find_free_port() -> int:
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("", 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
+
 
 def initialize_node(bucket_uri: str, path_to_save_in: str = "/nvme/model"):
     # Timeout in 10 minutes
@@ -43,6 +43,7 @@ def initialize_node(bucket_uri: str, path_to_save_in: str = "/nvme/model"):
             _initialize_node(bucket_uri, path_to_save_in)
             subprocess.run("touch /nvme/.done", shell=True, check=True)
 
+
 def _initialize_node(bucket_uri, path_to_save_in):
     # Mount nvme
     print("Mounting nvme")
@@ -52,15 +53,7 @@ def _initialize_node(bucket_uri, path_to_save_in):
     )
 
     subprocess.run(
-        [
-            "aws",
-            "s3",
-            "sync",
-            "--no-progress",
-            bucket_uri,
-            path_to_save_in,
-        ],
-        check=True
+        ["aws", "s3", "sync", "--no-progress", bucket_uri, path_to_save_in,], check=True
     )
     print("Done downloading the model")
 
@@ -78,7 +71,7 @@ class PredictionWorker:
         port = find_free_port()
 
         return addr, port
-    
+
     def init_distributed(
         self, local_rank: int, local_world_size: int, master_addr: str, master_port: str
     ):

@@ -25,27 +25,17 @@ from deepspeed_predictor import DeepSpeedPredictor, PredictionWorker, initialize
 
 from dataclasses import dataclass
 
-import time
-
-import argparse
 import os
-import socket
 from collections import defaultdict
-from contextlib import closing
-from datetime import timedelta
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 import ray
 import ray.util
-import torch.distributed as dist
-from ray.air import Checkpoint, ScalingConfig
-from ray.train.constants import DEFAULT_NCCL_SOCKET_IFNAME
-from ray.train.predictor import Predictor
+from ray.air import ScalingConfig
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
-from deepspeed_utils import generate, init_model
-from huggingface_utils import reshard_checkpoint
+import yaml
 
 app = FastAPI()
 
@@ -54,40 +44,43 @@ class Prompt(BaseModel):
     prompt: str
 
 
-BATCH_SIZE = 50
+class Args(BaseModel):
+    # bucket_uri: str = "s3://large-dl-models-mirror/models--anyscale--opt-66b-resharded/main/"
+    # name: str = "facebook/opt-66b"
+    # hf_home: str = "/nvme/cache"
+    # checkpoint_path: str = "/nvme/model"
+    bucket_uri: str
+    name: str
+    hf_home: str
+    checkpoint_path: str
+    batch_size: int = 20
+    ds_inference: bool = True
+    use_kernel: bool = True
+    use_meta_tensor: bool = True
+    num_worker_groups: int = 1
+    num_gpus_per_worker_group: int = 8
+    reshard_checkpoint_path: Optional[str] = None
+    use_cache: bool = True
+
+    max_new_tokens: int = 50
+    max_tokens: int = 1024
+    replace_method: int = False
+    dtype: str = "float16"
+    save_mp_checkpoint_path: Optional[str] = None
 
 
-@dataclass
-class Args:
-    bucket_uri = "s3://large-dl-models-mirror/models--anyscale--opt-66b-resharded/main/"
-    name = "facebook/opt-66b"
-    hf_home = "/nvme/cache"
-    checkpoint_path = "/nvme/model"
-    batch_size = BATCH_SIZE
-    ds_inference = True
-    use_kernel = True
-    use_meta_tensor = True
-    num_worker_groups = 1
-    num_gpus_per_worker_group = 8
-    reshard_checkpoint_path = None
-    use_cache = True
-
-    max_new_tokens = 50
-    max_tokens = 1024
-    replace_method = False
-    dtype = "float16"
-    save_mp_checkpoint_path = None
+raw_args = os.getenv("APPLICATION_ARGS")
+dict_args = yaml.load(raw_args, Loader=yaml.SafeLoader) if raw_args else None
+args = Args.parse_obj(dict_args) if dict_args else Args()
 
 
 @serve.deployment(
-    route_prefix="/", num_replicas=6,
+    route_prefix="/", num_replicas=1,
 )
 @serve.ingress(app)
-class DeepspeedApp2:
-    def __init__(self) -> None:
-        self.args = args = Args()
-
-        # initialize_node(args.bucket_uri)
+class DeepspeedApp:
+    def __init__(self, args: Args) -> None:
+        self.args = args
 
         scaling_config = ScalingConfig(
             use_gpu=True,
@@ -102,8 +95,10 @@ class DeepspeedApp2:
     async def generate_text(self, prompt: Prompt):
         return await self.generate_text_batch(prompt)
 
-    @serve.batch(max_batch_size=BATCH_SIZE)
+    @serve.batch(max_batch_size=args.batch_size)
     async def generate_text_batch(self, prompts: List[Prompt]):
+        """Generate text from the given prompts in batch """
+
         print("Received prompts", prompts)
         input_column = "predict"
         #  Wrap in pandas
@@ -187,7 +182,7 @@ class DeepspeedApp2:
         ray.get([worker.init_model.remote() for worker in self.prediction_workers])
 
 
-entrypoint = DeepspeedApp2.bind()
+entrypoint = DeepspeedApp.bind()
 
 # The following block will be executed if the script is run by Python directly
 if __name__ == "__main__":

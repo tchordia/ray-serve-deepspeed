@@ -1,8 +1,18 @@
 # This file was generated using the `serve build` command on Ray v3.0.0.dev0.
 
-import_path: deepspeed-serve-2:entrypoint
+import_path: deepspeed_app:entrypoint
 
-runtime_env: {}
+runtime_env: 
+  working_dir: https://github.com/tchordia/ray-serve-deepspeed/archive/refs/heads/master.zip
+  env_vars:
+    APPLICATION_ARGS: |-
+      bucket_uri: "s3://large-dl-models-mirror/models--anyscale--opt-66b-resharded/main/"
+      name: "facebook/opt-66b"
+      hf_home: "/nvme/cache"
+      checkpoint_path: "/nvme/model"
+      
+
+
 
 host: 0.0.0.0
 
